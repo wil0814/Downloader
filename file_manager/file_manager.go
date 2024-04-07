@@ -1,6 +1,7 @@
 package file_manager
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -8,10 +9,25 @@ import (
 )
 
 type FileManager struct {
+	buf []byte
 }
 
-func (d *FileManager) CreatPartDir(filename string) error {
-	partDir := d.GetPartDir(filename)
+func NewFileManager() *FileManager {
+	return &FileManager{
+		buf: make([]byte, 32*1024),
+	}
+}
+
+func (d *FileManager) CreateDestFile(filename string) (*os.File, error) {
+	flags := os.O_WRONLY | os.O_CREATE
+	destFile, err := os.OpenFile(filename, flags, 0666)
+	if err != nil {
+		return nil, err
+	}
+	return destFile, nil
+}
+func (d *FileManager) CreatDir(filename string) error {
+	partDir := d.GetDirName(filename)
 	err := os.Mkdir(partDir, 0777)
 	if err != nil {
 		return err
@@ -21,14 +37,14 @@ func (d *FileManager) CreatPartDir(filename string) error {
 
 func (d *FileManager) WriteFile(fileName string, partNum int, body io.Reader) error {
 	flags := os.O_WRONLY | os.O_CREATE
+	partFilePath := d.GetPartFileName(fileName, partNum)
 
-	partFile, err := os.OpenFile(d.GetPartFileName(fileName, partNum), flags, 0666)
+	partFile, err := os.OpenFile(partFilePath, flags, 0666)
 	if err != nil {
-		return err
+		return errors.New(partFilePath)
 	}
 	defer partFile.Close()
-	buf := make([]byte, 32*1024)
-	_, err = io.CopyBuffer(partFile, body, buf)
+	_, err = io.CopyBuffer(partFile, body, d.buf)
 
 	if err != nil && err != io.EOF {
 		return err
@@ -52,17 +68,25 @@ func (d *FileManager) Merge(fileName string, concurrency int) error {
 			return err
 		}
 
-		io.Copy(destFile, partFile)
+		_, err = io.Copy(destFile, partFile)
+		if err != nil {
+			partFile.Close()
+			return err
+		}
 		partFile.Close()
-		os.Remove(partFileName)
+
+		err = os.Remove(partFileName)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (d *FileManager) GetPartFileName(filename string, partNum int) string {
-	partDir := d.GetPartDir(filename)
-	return fmt.Sprintf("%s/%s-%d", partDir, filename, partNum)
+	dirName := d.GetDirName(filename)
+	return fmt.Sprintf("%s/%s-%d", dirName, filename, partNum)
 }
-func (d *FileManager) GetPartDir(fileName string) string {
+func (d *FileManager) GetDirName(fileName string) string {
 	return strings.SplitN(fileName, ".", 2)[0]
 }

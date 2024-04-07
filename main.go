@@ -37,7 +37,10 @@ func main() {
 			strURL := c.String("url")
 			filename := c.String("output")
 			concurrency := c.Int("concurrency")
-			d := download.NewDownload(concurrency)
+			d, err := download.NewDownload(strURL, concurrency)
+			if err != nil {
+				return err
+			}
 			return d.Download(strURL, filename)
 		},
 	}
