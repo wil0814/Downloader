@@ -1,46 +1,40 @@
 package download
 
 import (
-	"download/file_manager"
-	"download/http_client"
-	"net/http"
+	"download/download/flag"
+	"fmt"
 )
 
 type Downloader interface {
-	Download(url string, filename string) error
+	Download() error
 }
 
 type Download struct {
-	downloader Downloader
+	FactoryMap map[flag.ProtocolType]DownloaderFactory
 }
 
-func NewDownload(url string, concurrency int) (*Download, error) {
-	client := http_client.NewHTTPClient()
-	file := file_manager.NewFileManager()
-	resp, err := http.Get(url)
+func NewDownload() *Download {
+	d := &Download{
+		FactoryMap: make(map[flag.ProtocolType]DownloaderFactory),
+	}
+	d.registerFactory(flag.ProtocolHTTP, NewHTTPDownloaderFactory())
+	d.registerFactory(flag.ProtocolFTP, NewFTPDownloaderFactory())
+	return d
+}
+
+func (d *Download) registerFactory(protocol flag.ProtocolType, factory DownloaderFactory) {
+	d.FactoryMap[protocol] = factory
+}
+func (d *Download) Download(flag flag.UserFlag) error {
+	factory, ok := d.FactoryMap[flag.Protocol]
+	if !ok {
+		return fmt.Errorf("unsupported protocol: %s", flag.Protocol)
+	}
+
+	downloader, err := factory.CreateDownloader(flag)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	factories := []DownloaderFactory{
-		NewMultiDownloadFactory(),
-		NewSingleDownloadFactory(), // Fallback
+		return fmt.Errorf("failed to create downloader: %w", err)
 	}
 
-	var downloader Downloader
-	for _, factory := range factories {
-		if factory.CanHandle(resp) {
-			downloader = factory.CreateDownloader(client, file, concurrency)
-			break
-		}
-	}
-
-	return &Download{
-		downloader: downloader,
-	}, nil
-}
-
-func (d *Download) Download(url string, filename string) error {
-	return d.downloader.Download(url, filename)
+	return downloader.Download()
 }

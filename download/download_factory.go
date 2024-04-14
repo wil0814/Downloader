@@ -1,40 +1,56 @@
 package download
 
 import (
+	"download/download/flag"
+	"download/download/ftp_download"
+	"download/download/ftp_download/ftp_handler"
+	"download/download/http_download"
+	"download/download/http_download/http_handler"
 	"download/file_manager"
-	"download/http_client"
+	"fmt"
 	"net/http"
 )
 
 type DownloaderFactory interface {
-	CanHandle(resp *http.Response) bool
-	CreateDownloader(client *http_client.HTTPClient, file *file_manager.FileManager, concurrency int) Downloader
+	CreateDownloader(flag flag.UserFlag) (Downloader, error)
+}
+type HTTPDownloaderFactory struct{}
+
+func NewHTTPDownloaderFactory() *HTTPDownloaderFactory {
+	return &HTTPDownloaderFactory{}
+}
+func (f *HTTPDownloaderFactory) CreateDownloader(flag flag.UserFlag) (Downloader, error) {
+	client := http_handler.NewHTTPClient()
+	file := file_manager.NewFileManager()
+	resp, err := http.Get(flag.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if !client.IsHttpStatusOK(resp) {
+		return nil, fmt.Errorf("HTTP request failed with status code: %d", resp.StatusCode)
+	}
+
+	if client.SupportRange(resp) {
+		fmt.Println("resume download")
+		return http_download.NewResumeDownload(client, file, &flag), nil
+	} else {
+		fmt.Println("standard download")
+		return http_download.NewStandardDownload(&flag), nil
+	}
 }
 
-type SingleDownloadFactory struct{}
+type FTPDownloaderFactory struct{}
 
-func NewSingleDownloadFactory() *SingleDownloadFactory {
-	return &SingleDownloadFactory{}
+func NewFTPDownloaderFactory() *FTPDownloaderFactory {
+	return &FTPDownloaderFactory{}
 }
-func (f *SingleDownloadFactory) CanHandle(_ *http.Response) bool {
-	// Always return true as a fallback
-	return true
-}
-
-func (f *SingleDownloadFactory) CreateDownloader(client *http_client.HTTPClient, file *file_manager.FileManager, _ int) Downloader {
-	return NewSingleDownload(client, file)
-}
-
-type MultiDownloadFactory struct{}
-
-func NewMultiDownloadFactory() *MultiDownloadFactory {
-	return &MultiDownloadFactory{}
-}
-func (f *MultiDownloadFactory) CanHandle(resp *http.Response) bool {
-	client := &http_client.HTTPClient{}
-	return client.IsHttpStatusOK(resp) && client.SupportRange(resp)
-}
-
-func (f *MultiDownloadFactory) CreateDownloader(client *http_client.HTTPClient, file *file_manager.FileManager, concurrency int) Downloader {
-	return NewMultiDownloader(client, file, concurrency)
+func (f *FTPDownloaderFactory) CreateDownloader(flag flag.UserFlag) (Downloader, error) {
+	ftpURLParser := ftp_handler.NewFTPURLParser()
+	ftpURL, err := ftpURLParser.Parse(flag.Path)
+	if err != nil {
+		return nil, err
+	}
+	return ftp_download.NewFtpDownload(&flag, ftpURL), nil
 }

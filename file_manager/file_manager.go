@@ -1,21 +1,31 @@
 package file_manager
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 )
 
+type FileManagerInterface interface {
+	GetPartFileName(filename string, partNum int) string
+	GetDirName(fileName string) string
+	CreateDestFile(filename string) (*os.File, error)
+	CreatDir(filename string) error
+	Merge(fileName string, concurrency int) error
+}
 type FileManager struct {
-	buf []byte
 }
 
 func NewFileManager() *FileManager {
-	return &FileManager{
-		buf: make([]byte, 32*1024),
-	}
+	return &FileManager{}
+}
+func (d *FileManager) GetPartFileName(filename string, partNum int) string {
+	dirName := d.GetDirName(filename)
+	return fmt.Sprintf("%s/%s-%d", dirName, filename, partNum)
+}
+func (d *FileManager) GetDirName(fileName string) string {
+	return strings.SplitN(fileName, ".", 2)[0]
 }
 
 func (d *FileManager) CreateDestFile(filename string) (*os.File, error) {
@@ -30,23 +40,6 @@ func (d *FileManager) CreatDir(filename string) error {
 	partDir := d.GetDirName(filename)
 	err := os.Mkdir(partDir, 0777)
 	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (d *FileManager) WriteFile(fileName string, partNum int, body io.Reader) error {
-	flags := os.O_WRONLY | os.O_CREATE
-	partFilePath := d.GetPartFileName(fileName, partNum)
-
-	partFile, err := os.OpenFile(partFilePath, flags, 0666)
-	if err != nil {
-		return errors.New(partFilePath)
-	}
-	defer partFile.Close()
-	_, err = io.CopyBuffer(partFile, body, d.buf)
-
-	if err != nil && err != io.EOF {
 		return err
 	}
 	return nil
@@ -81,12 +74,4 @@ func (d *FileManager) Merge(fileName string, concurrency int) error {
 		}
 	}
 	return nil
-}
-
-func (d *FileManager) GetPartFileName(filename string, partNum int) string {
-	dirName := d.GetDirName(filename)
-	return fmt.Sprintf("%s/%s-%d", dirName, filename, partNum)
-}
-func (d *FileManager) GetDirName(fileName string) string {
-	return strings.SplitN(fileName, ".", 2)[0]
 }
