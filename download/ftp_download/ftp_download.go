@@ -5,6 +5,7 @@ import (
 	"download/download/ftp_download/ftp_handler"
 	"download/file_manager"
 	"download/utils/progress_bar"
+	"fmt"
 	"github.com/jlaffaye/ftp"
 	"io"
 	"log"
@@ -29,23 +30,22 @@ func NewFtpDownload(flag *flag.UserFlag, ftpURL *ftp_handler.FTPPathInfo) *FtpDo
 func (d *FtpDownload) Download() error {
 	c, err := d.connect()
 	if err != nil {
-		return err
+		return fmt.Errorf("%w.\nPlease make sure the FTP URL is in the correct format: ftp://username:password@hostname:port/path/filename", err)
 	}
 
 	defer c.Quit()
 
 	err = d.login(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w.\nPlease make sure the FTP URL is in the correct format: ftp://username:password@hostname:port/path/filename", err)
 	}
 
 	err = d.changeDir(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w.\nPlease make sure the FTP URL is in the correct format: ftp://username:password@hostname:port/path/filename", err)
 	}
 
 	return d.retrieveFile(c)
-
 }
 func (d *FtpDownload) connect() (*ftp.ServerConn, error) {
 	addr := d.ftpURL.Host + ":" + d.ftpURL.Port
@@ -76,7 +76,7 @@ func (d *FtpDownload) changeDir(c *ftp.ServerConn) error {
 func (d *FtpDownload) retrieveFile(c *ftp.ServerConn) error {
 	body, err := c.Retr(d.ftpURL.Filename)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w.\nPlease make sure the FTP URL is in the correct format: ftp://username:password@hostname:port/path/filename", err)
 	}
 	defer body.Close()
 	return d.writeFile(body, d.ftpURL.Filename)
@@ -116,5 +116,5 @@ func (d *FtpDownload) writeFile(body io.Reader, filename string) error {
 	// Wait for all progress bar to complete
 	pb.Progress.Wait()
 
-	return err
+	return nil
 }
