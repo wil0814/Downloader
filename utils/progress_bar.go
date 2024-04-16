@@ -1,4 +1,4 @@
-package progress_bar
+package utils
 
 import (
 	"github.com/vbauerster/mpb/v8"

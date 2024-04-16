@@ -1,10 +1,10 @@
 package ftp_download
 
 import (
-	"download/download/flag"
 	"download/download/ftp_download/ftp_handler"
 	"download/file_manager"
-	"download/utils/progress_bar"
+	"download/upload"
+	"download/utils"
 	"fmt"
 	"github.com/jlaffaye/ftp"
 	"io"
@@ -14,15 +14,15 @@ import (
 
 type FtpDownload struct {
 	fileManager file_manager.FileManagerInterface
-	flag        *flag.UserFlag
+	userFlag    *utils.UserFlag
 	ftpURL      *ftp_handler.FTPPathInfo
 }
 
-func NewFtpDownload(flag *flag.UserFlag, ftpURL *ftp_handler.FTPPathInfo) *FtpDownload {
+func NewFtpDownload(userFlag *utils.UserFlag, ftpURL *ftp_handler.FTPPathInfo) *FtpDownload {
 	fileManager := file_manager.NewFileManager()
 	return &FtpDownload{
 		fileManager: fileManager,
-		flag:        flag,
+		userFlag:    userFlag,
 		ftpURL:      ftpURL,
 	}
 }
@@ -33,7 +33,12 @@ func (d *FtpDownload) Download() error {
 		return fmt.Errorf("%w.\nPlease make sure the FTP URL is in the correct format: ftp://username:password@hostname:port/path/filename", err)
 	}
 
-	defer c.Quit()
+	defer func(c *ftp.ServerConn) {
+		err := c.Quit()
+		if err != nil {
+			log.Println(err)
+		}
+	}(c)
 
 	err = d.login(c)
 	if err != nil {
@@ -78,18 +83,34 @@ func (d *FtpDownload) retrieveFile(c *ftp.ServerConn) error {
 	if err != nil {
 		return fmt.Errorf("%w.\nPlease make sure the FTP URL is in the correct format: ftp://username:password@hostname:port/path/filename", err)
 	}
-	defer body.Close()
-	return d.writeFile(body, d.ftpURL.Filename)
-}
+	defer func(body *ftp.Response) {
+		err := body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(body)
 
-func (d *FtpDownload) writeFile(body io.Reader, filename string) error {
+	if string(upload.DestinationS3) == d.userFlag.UploadDestination {
+		return d.uploadToS3(d.getFileName(), body)
+	}
+
+	return d.writeFile(d.getFileName(), body)
+}
+func (d *FtpDownload) getFileName() string {
+	if d.userFlag.FileName == "" {
+		return d.ftpURL.Filename
+	} else {
+		return d.userFlag.FileName
+	}
+}
+func (d *FtpDownload) writeFile(filename string, body io.Reader) error {
 	localFile, err := d.fileManager.CreateDestFile(filename)
 	if err != nil {
 		return err
 	}
 	defer localFile.Close()
 
-	pb := progress_bar.NewProgressBar()
+	pb := utils.NewProgressBar()
 	bar := pb.CreateBar()
 
 	for {
@@ -117,4 +138,8 @@ func (d *FtpDownload) writeFile(body io.Reader, filename string) error {
 	pb.Progress.Wait()
 
 	return nil
+}
+func (d *FtpDownload) uploadToS3(fileName string, body io.Reader) error {
+	u := upload.NewUpload(fileName, body, d.userFlag)
+	return u.Upload(upload.DestinationS3)
 }

@@ -1,20 +1,21 @@
 package http_download
 
 import (
-	"download/download/flag"
 	"download/file_manager"
-	"download/utils/progress_bar"
+	"download/upload"
+	"download/utils"
 	"io"
+	"log"
 	"net/http"
 	"path"
 )
 
 type StandardDownload struct {
-	userFlag    *flag.UserFlag
+	userFlag    *utils.UserFlag
 	fileManager file_manager.FileManagerInterface
 }
 
-func NewStandardDownload(userFlag *flag.UserFlag) *StandardDownload {
+func NewStandardDownload(userFlag *utils.UserFlag) *StandardDownload {
 	fileManager := file_manager.NewFileManager()
 	return &StandardDownload{
 		fileManager: fileManager,
@@ -33,13 +34,24 @@ func (d *StandardDownload) getFileName() string {
 		return d.userFlag.FileName
 	}
 }
+
 func (d *StandardDownload) retrieveHTTP(fileName string) error {
 	resp, err := http.Get(d.userFlag.Path)
 	if err != nil {
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(resp.Body)
+
+	if string(upload.DestinationS3) == d.userFlag.UploadDestination {
+		return d.uploadToS3(fileName, resp.Body)
+	}
+
 	return d.writeResponseToFile(resp, fileName)
 }
 func (d *StandardDownload) writeResponseToFile(resp *http.Response, filename string) error {
@@ -49,7 +61,7 @@ func (d *StandardDownload) writeResponseToFile(resp *http.Response, filename str
 	}
 	defer localFile.Close()
 
-	pb := progress_bar.NewProgressBar()
+	pb := utils.NewProgressBar()
 	bar := pb.CreateBar()
 
 	for {
@@ -77,4 +89,8 @@ func (d *StandardDownload) writeResponseToFile(resp *http.Response, filename str
 	pb.Progress.Wait()
 
 	return err
+}
+func (d *StandardDownload) uploadToS3(fileName string, body io.Reader) error {
+	u := upload.NewUpload(fileName, body, d.userFlag)
+	return u.Upload(upload.DestinationS3)
 }

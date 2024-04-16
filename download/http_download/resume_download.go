@@ -1,10 +1,10 @@
 package http_download
 
 import (
-	"download/download/flag"
 	"download/download/http_download/http_handler"
 	"download/file_manager"
-	"download/utils/progress_bar"
+	"download/upload"
+	"download/utils"
 	"github.com/vbauerster/mpb/v8"
 	"io"
 	"log"
@@ -23,10 +23,10 @@ type DownloadParams struct {
 type ResumeDownload struct {
 	client      http_handler.HttpHandlerInterface
 	fileManager file_manager.FileManagerInterface
-	userFlag    *flag.UserFlag
+	userFlag    *utils.UserFlag
 }
 
-func NewResumeDownload(client http_handler.HttpHandlerInterface, file file_manager.FileManagerInterface, flag *flag.UserFlag) *ResumeDownload {
+func NewResumeDownload(client http_handler.HttpHandlerInterface, file file_manager.FileManagerInterface, flag *utils.UserFlag) *ResumeDownload {
 	return &ResumeDownload{
 		client:      client,
 		fileManager: file,
@@ -50,22 +50,33 @@ func (d *ResumeDownload) retrieveHTTP(fileName string) error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(resp.Body)
 	return d.resumeDownload(fileName, int(resp.ContentLength))
 }
-func (d *ResumeDownload) resumeDownload(filename string, contentLength int) error {
+
+func (d *ResumeDownload) resumeDownload(fileName string, contentLength int) error {
 	concurrency := d.userFlag.Concurrency
 	partSize := contentLength / concurrency
-	err := d.fileManager.CreatDir(filename)
+	err := d.fileManager.CreatDir(fileName)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(d.fileManager.GetDirName(filename))
+	defer func(path string) {
+		err := os.RemoveAll(path)
+		if err != nil {
+			log.Println(err)
+		}
+	}(d.fileManager.GetDirName(fileName))
 
-	pb := progress_bar.NewProgressBar()
+	pb := utils.NewProgressBar()
 	bar := pb.CreateBar()
 	params := &DownloadParams{
-		filename:      filename,
+		filename:      fileName,
 		contentLength: contentLength,
 		partSize:      partSize,
 		bar:           bar,
@@ -77,11 +88,18 @@ func (d *ResumeDownload) resumeDownload(filename string, contentLength int) erro
 	// Wait for all progress bar to complete
 	pb.Progress.Wait()
 
-	err = d.fileManager.Merge(filename, concurrency)
+	err = d.fileManager.Merge(fileName, concurrency)
 	if err != nil {
 		return err
 	}
 
+	if string(upload.DestinationS3) == d.userFlag.UploadDestination {
+		return d.uploadToS3(fileName)
+	}
+
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -112,7 +130,12 @@ func (d *ResumeDownload) downloadWorker(params *DownloadParams, wg *sync.WaitGro
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(resp.Body)
 
 	partFile, err := d.fileManager.CreateDestFile(d.fileManager.GetPartFileName(params.filename, segmentIndex))
 	if err != nil {
@@ -140,4 +163,19 @@ func (d *ResumeDownload) downloadWorker(params *DownloadParams, wg *sync.WaitGro
 			break
 		}
 	}
+}
+func (d *ResumeDownload) uploadToS3(fileName string) error {
+	file, err := os.Open(fileName)
+	if err != nil {
+		return err
+	}
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			log.Println(err)
+		}
+	}(fileName)
+	defer file.Close()
+	u := upload.NewUpload(fileName, file, d.userFlag)
+	return u.Upload(upload.DestinationS3)
 }

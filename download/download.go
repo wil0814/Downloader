@@ -1,7 +1,7 @@
 package download
 
 import (
-	"download/download/flag"
+	"download/utils"
 	"fmt"
 )
 
@@ -10,31 +10,30 @@ type Downloader interface {
 }
 
 type Download struct {
-	FactoryMap map[flag.ProtocolType]DownloaderFactory
+	FactoryMap map[utils.ProtocolType]DownloaderFactory
 }
 
 func NewDownload() *Download {
 	d := &Download{
-		FactoryMap: make(map[flag.ProtocolType]DownloaderFactory),
+		FactoryMap: make(map[utils.ProtocolType]DownloaderFactory),
 	}
-	d.registerFactory(flag.ProtocolHTTP, NewHTTPDownloaderFactory())
-	d.registerFactory(flag.ProtocolFTP, NewFTPDownloaderFactory())
+	d.registerFactory(utils.ProtocolHTTP, NewHTTPDownloaderFactory())
+	d.registerFactory(utils.ProtocolFTP, NewFTPDownloaderFactory())
 	return d
 }
 
-func (d *Download) registerFactory(protocol flag.ProtocolType, factory DownloaderFactory) {
+func (d *Download) registerFactory(protocol utils.ProtocolType, factory DownloaderFactory) {
 	d.FactoryMap[protocol] = factory
 }
-func (d *Download) Download(flag flag.UserFlag) error {
-	factory, ok := d.FactoryMap[flag.Protocol]
+func (d *Download) Download(userFlag utils.UserFlag) error {
+	factory, ok := d.FactoryMap[userFlag.Protocol]
 	if !ok {
-		return fmt.Errorf("unsupported protocol: %s", flag.Protocol)
+		return fmt.Errorf("unsupported protocol: %s", userFlag.Protocol)
 	}
 
-	downloader, err := factory.CreateDownloader(flag)
+	downloader, err := factory.CreateDownloader(userFlag)
 	if err != nil {
 		return fmt.Errorf("failed to create downloader: %w", err)
 	}
-
 	return downloader.Download()
 }
