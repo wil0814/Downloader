@@ -1,10 +1,11 @@
-package http_download
+package http
 
 import (
-	"download/download/http_download/http_handler"
-	"download/file_manager"
-	"download/upload"
-	"download/utils"
+	"download/application/model"
+	"download/domain/upload/service"
+	"download/infrastructure"
+	"errors"
+	"fmt"
 	"github.com/vbauerster/mpb/v8"
 	"io"
 	"log"
@@ -21,15 +22,14 @@ type DownloadParams struct {
 	bar           *mpb.Bar
 }
 type ResumeDownload struct {
-	client      http_handler.HttpHandlerInterface
-	fileManager file_manager.FileManagerInterface
-	userFlag    *utils.UserFlag
+	fileManager infrastructure.FileManagerInterface
+	userFlag    *model.UserFlag
 }
 
-func NewResumeDownload(client http_handler.HttpHandlerInterface, file file_manager.FileManagerInterface, flag *utils.UserFlag) *ResumeDownload {
+func NewResumeDownload(flag *model.UserFlag) *ResumeDownload {
+	fileManager := infrastructure.NewFileManager()
 	return &ResumeDownload{
-		client:      client,
-		fileManager: file,
+		fileManager: fileManager,
 		userFlag:    flag,
 	}
 }
@@ -73,7 +73,7 @@ func (d *ResumeDownload) resumeDownload(fileName string, contentLength int) erro
 		}
 	}(d.fileManager.GetDirName(fileName))
 
-	pb := utils.NewProgressBar()
+	pb := infrastructure.NewProgressBar()
 	bar := pb.CreateBar()
 	params := &DownloadParams{
 		filename:      fileName,
@@ -83,7 +83,7 @@ func (d *ResumeDownload) resumeDownload(fileName string, contentLength int) erro
 	}
 	d.initiateDownloadWorkers(params)
 
-	// Set the total to -1 to indicate that the download is complete
+	// Set the total to -1 to indicate that the Download is complete
 	bar.SetTotal(-1, true)
 	// Wait for all progress bar to complete
 	pb.Progress.Wait()
@@ -93,7 +93,7 @@ func (d *ResumeDownload) resumeDownload(fileName string, contentLength int) erro
 		return err
 	}
 
-	if string(upload.DestinationS3) == d.userFlag.UploadDestination {
+	if string(service.DestinationS3) == d.userFlag.UploadDestination {
 		return d.uploadToS3(fileName)
 	}
 
@@ -126,7 +126,7 @@ func (d *ResumeDownload) initiateDownloadWorkers(params *DownloadParams) {
 func (d *ResumeDownload) downloadWorker(params *DownloadParams, wg *sync.WaitGroup, segmentIndex int, segmentStart int, segmentEnd int) {
 	defer wg.Done()
 
-	resp, err := d.client.DownloadPartial(d.userFlag.Path, segmentStart, segmentEnd)
+	resp, err := d.DownloadPartial(d.userFlag.Path, segmentStart, segmentEnd)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -176,6 +176,34 @@ func (d *ResumeDownload) uploadToS3(fileName string) error {
 		}
 	}(fileName)
 	defer file.Close()
-	u := upload.NewUpload(fileName, file, d.userFlag)
-	return u.Upload(upload.DestinationS3)
+	u := service.NewUpload(fileName, file, d.userFlag, service.WithS3Uploader())
+	return u.Upload(service.DestinationS3)
+}
+func (d *ResumeDownload) DownloadPartial(url string, start int, end int) (*http.Response, error) {
+	resp, err := d.createRangeRequest(url, start, end)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (d *ResumeDownload) createRangeRequest(url string, start, end int) (*http.Response, error) {
+	if start >= end {
+		return nil, errors.New("invalid range")
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+	return resp, nil
 }

@@ -1,7 +1,7 @@
 package s3
 
 import (
-	"download/utils"
+	"download/application/model"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -17,7 +17,7 @@ func NewS3Upload() *S3Upload {
 	return &S3Upload{}
 }
 
-func (s *S3Upload) Upload(fileName string, body io.Reader, userFlag *utils.UserFlag) error {
+func (s *S3Upload) Upload(fileName string, body io.Reader, userFlag *model.UserFlag) error {
 	fmt.Println("Uploading to S3...")
 	// 創建新的AWS session
 	sess, err := session.NewSession(&aws.Config{

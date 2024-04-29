@@ -1,10 +1,9 @@
-package ftp_download
+package ftp
 
 import (
-	"download/download/ftp_download/ftp_handler"
-	"download/file_manager"
-	"download/upload"
-	"download/utils"
+	"download/application/model"
+	"download/domain/upload/service"
+	"download/infrastructure"
 	"fmt"
 	"github.com/jlaffaye/ftp"
 	"io"
@@ -13,13 +12,13 @@ import (
 )
 
 type FtpDownload struct {
-	fileManager file_manager.FileManagerInterface
-	userFlag    *utils.UserFlag
-	ftpURL      *ftp_handler.FTPPathInfo
+	fileManager infrastructure.FileManagerInterface
+	userFlag    *model.UserFlag
+	ftpURL      *FTPUrlInfo
 }
 
-func NewFtpDownload(userFlag *utils.UserFlag, ftpURL *ftp_handler.FTPPathInfo) *FtpDownload {
-	fileManager := file_manager.NewFileManager()
+func NewFtpDownload(userFlag *model.UserFlag, ftpURL *FTPUrlInfo) *FtpDownload {
+	fileManager := infrastructure.NewFileManager()
 	return &FtpDownload{
 		fileManager: fileManager,
 		userFlag:    userFlag,
@@ -53,6 +52,7 @@ func (d *FtpDownload) Download() error {
 	return d.retrieveFile(c)
 }
 func (d *FtpDownload) connect() (*ftp.ServerConn, error) {
+	fmt.Println("Connect 嗨嗨")
 	addr := d.ftpURL.Host + ":" + d.ftpURL.Port
 	c, err := ftp.Dial(addr, ftp.DialWithTimeout(5*time.Second))
 	if err != nil {
@@ -90,7 +90,7 @@ func (d *FtpDownload) retrieveFile(c *ftp.ServerConn) error {
 		}
 	}(body)
 
-	if string(upload.DestinationS3) == d.userFlag.UploadDestination {
+	if string(service.DestinationS3) == d.userFlag.UploadDestination {
 		return d.uploadToS3(d.getFileName(), body)
 	}
 
@@ -110,7 +110,7 @@ func (d *FtpDownload) writeFile(filename string, body io.Reader) error {
 	}
 	defer localFile.Close()
 
-	pb := utils.NewProgressBar()
+	pb := infrastructure.NewProgressBar()
 	bar := pb.CreateBar()
 
 	for {
@@ -140,6 +140,6 @@ func (d *FtpDownload) writeFile(filename string, body io.Reader) error {
 	return nil
 }
 func (d *FtpDownload) uploadToS3(fileName string, body io.Reader) error {
-	u := upload.NewUpload(fileName, body, d.userFlag)
-	return u.Upload(upload.DestinationS3)
+	u := service.NewUpload(fileName, body, d.userFlag, service.WithS3Uploader())
+	return u.Upload(service.DestinationS3)
 }

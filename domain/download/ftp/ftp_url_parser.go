@@ -1,4 +1,4 @@
-package ftp_handler
+package ftp
 
 import (
 	"fmt"
@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-type FTPPathParser struct{}
-type FTPPathInfo struct {
+type FTPUrlParser struct{}
+type FTPUrlInfo struct {
 	Username string
 	Password string
 	Host     string
@@ -16,10 +16,10 @@ type FTPPathInfo struct {
 	Filename string
 }
 
-func NewFTPURLParser() *FTPPathParser {
-	return &FTPPathParser{}
+func NewFTPURLParser() *FTPUrlParser {
+	return &FTPUrlParser{}
 }
-func (p *FTPPathParser) Parse(ftpPath string) (*FTPPathInfo, error) {
+func (p *FTPUrlParser) Parse(ftpPath string) (*FTPUrlInfo, error) {
 	u, err := url.Parse(ftpPath)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (p *FTPPathParser) Parse(ftpPath string) (*FTPPathInfo, error) {
 	filename := path[strings.LastIndex(path, "/")+1:]
 	path = path[:strings.LastIndex(path, "/")+1]
 
-	return &FTPPathInfo{
+	return &FTPUrlInfo{
 		Username: username,
 		Password: password,
 		Host:     host,

@@ -1,9 +1,9 @@
-package http_download
+package http
 
 import (
-	"download/file_manager"
-	"download/upload"
-	"download/utils"
+	"download/application/model"
+	"download/domain/upload/service"
+	"download/infrastructure"
 	"io"
 	"log"
 	"net/http"
@@ -11,12 +11,12 @@ import (
 )
 
 type StandardDownload struct {
-	userFlag    *utils.UserFlag
-	fileManager file_manager.FileManagerInterface
+	userFlag    *model.UserFlag
+	fileManager infrastructure.FileManagerInterface
 }
 
-func NewStandardDownload(userFlag *utils.UserFlag) *StandardDownload {
-	fileManager := file_manager.NewFileManager()
+func NewStandardDownload(userFlag *model.UserFlag) *StandardDownload {
+	fileManager := infrastructure.NewFileManager()
 	return &StandardDownload{
 		fileManager: fileManager,
 		userFlag:    userFlag,
@@ -48,7 +48,7 @@ func (d *StandardDownload) retrieveHTTP(fileName string) error {
 		}
 	}(resp.Body)
 
-	if string(upload.DestinationS3) == d.userFlag.UploadDestination {
+	if string(service.DestinationS3) == d.userFlag.UploadDestination {
 		return d.uploadToS3(fileName, resp.Body)
 	}
 
@@ -61,7 +61,7 @@ func (d *StandardDownload) writeResponseToFile(resp *http.Response, filename str
 	}
 	defer localFile.Close()
 
-	pb := utils.NewProgressBar()
+	pb := infrastructure.NewProgressBar()
 	bar := pb.CreateBar()
 
 	for {
@@ -84,13 +84,13 @@ func (d *StandardDownload) writeResponseToFile(resp *http.Response, filename str
 		}
 	}
 
-	// Set the total to -1 to indicate that the download is complete
+	// Set the total to -1 to indicate that the Download is complete
 	bar.SetTotal(-1, true)
 	pb.Progress.Wait()
 
 	return err
 }
 func (d *StandardDownload) uploadToS3(fileName string, body io.Reader) error {
-	u := upload.NewUpload(fileName, body, d.userFlag)
-	return u.Upload(upload.DestinationS3)
+	u := service.NewUpload(fileName, body, d.userFlag, service.WithS3Uploader())
+	return u.Upload(service.DestinationS3)
 }
