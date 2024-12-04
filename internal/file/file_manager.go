@@ -1,4 +1,4 @@
-package infrastructure
+package file
 
 import (
 	"fmt"
@@ -7,13 +7,6 @@ import (
 	"strings"
 )
 
-type FileManagerInterface interface {
-	GetPartFileName(filename string, partNum int) string
-	GetDirName(fileName string) string
-	CreateDestFile(filename string) (*os.File, error)
-	CreatDir(filename string) error
-	Merge(fileName string, concurrency int) error
-}
 type FileManager struct {
 }
 
