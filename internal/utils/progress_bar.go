@@ -4,18 +4,18 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-type ProgressBar struct {
+type DefaultProgressBar struct {
+	bar *progressbar.ProgressBar
 }
 
-func NewProgressBar() *ProgressBar {
-	return &ProgressBar{}
+func NewProgressBar(total int64) *DefaultProgressBar {
+	return &DefaultProgressBar{
+		bar: progressbar.DefaultBytes(total, "downloading"),
+	}
 }
 
-func (pb *ProgressBar) CreateBar(total int64) *progressbar.ProgressBar {
-	bar := progressbar.DefaultBytes(
-		total,
-		"downloading",
-	)
-
-	return bar
+func (pb *DefaultProgressBar) Write(p []byte) (n int, err error) {
+	n = len(p)
+	err = pb.bar.Add(n)
+	return n, err
 }

@@ -68,10 +68,9 @@ func (d *StandardDownload) writeResponseToFile(ctx context.Context, respBody io.
 	}()
 
 	// 初始化進度條
-	progressBar := utils.NewProgressBar()
-	bar := progressBar.CreateBar(contentLength)
+	progressBar := utils.NewProgressBar(contentLength)
 	ctxWriter := &utils.ContextWriter{
-		Writer:  io.MultiWriter(localFile, bar),
+		Writer:  io.MultiWriter(localFile, progressBar),
 		Context: ctx,
 	}
 
