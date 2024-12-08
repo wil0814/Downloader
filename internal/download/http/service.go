@@ -1,27 +1,29 @@
 package http
 
 import (
+	"download/internal/utils"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 )
 
-type configurators struct {
+type Configurators struct {
 	url         string
 	fileName    string
 	concurrency int
 	timeout     time.Duration
 }
 
-type Configurator func(d *configurators) error
+type Configurator func(d *Configurators) error
 
 type Downloader struct {
 	Downloader DownloadService
 }
 
 func NewHttpService(fileManager FileManager, cfg ...Configurator) (*Downloader, error) {
-	var configurators configurators
+	var configurators Configurators
 	for _, c := range cfg {
 		err := c(&configurators)
 		if err != nil {
@@ -33,27 +35,38 @@ func NewHttpService(fileManager FileManager, cfg ...Configurator) (*Downloader, 
 		return nil, fmt.Errorf("url is required")
 	}
 
-	if configurators.concurrency == 0 {
-		configurators.concurrency = 10
+	maxConcurrency := runtime.NumCPU()
+	if configurators.concurrency <= 0 || configurators.concurrency > maxConcurrency {
+		configurators.concurrency = maxConcurrency
 	}
 
-	//if configurators.concurrency > 1 {
-	//	supports, err := utils.SupportsResume(configurators.url)
-	//	if err != nil {
-	//		return nil, fmt.Errorf("failed to check if URL supports resume: %w", err)
-	//	}
-	//	if supports {
-	//		return &Downloader{Downloader: NewResumeDownload(fileManager, configurators.timeout)}, nil
-	//	}
-	//	fmt.Println("URL does not support resume, falling back to StandardDownload")
-	//}
+	if configurators.concurrency > 1 {
+		ok, err := utils.SupportsResume(configurators.url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if URL supports resume: %w", err)
+		}
+		if ok {
+			return &Downloader{
+				Downloader: NewResumeDownload(
+					fileManager,
+					configurators,
+				),
+			}, nil
+		}
+		fmt.Println("URL does not support resume, falling back to StandardDownload")
+	}
 
-	return &Downloader{Downloader: NewStandardDownload(fileManager, configurators.url, configurators.fileName, configurators.timeout)}, nil
+	return &Downloader{
+		Downloader: NewStandardDownload(
+			fileManager,
+			configurators,
+		),
+	}, nil
 }
 
-// WithURL 配置 URL 並進行驗證
+// WithURL configures the URL to download
 func WithURL(rawURL string) Configurator {
-	return func(cfg *configurators) error {
+	return func(cfg *Configurators) error {
 		if rawURL == "" {
 			return fmt.Errorf("url cannot be empty")
 		}
@@ -69,8 +82,9 @@ func WithURL(rawURL string) Configurator {
 	}
 }
 
+// WithFileName configures the filename to save the downloaded file
 func WithFileName(fileName string) Configurator {
-	return func(cfg *configurators) error {
+	return func(cfg *Configurators) error {
 		if fileName == "" {
 			return fmt.Errorf("fileName cannot be empty")
 		}
@@ -80,9 +94,9 @@ func WithFileName(fileName string) Configurator {
 	}
 }
 
-// WithConcurrency 配置併發數量並初始化資源
+// WithConcurrency configures the number of concurrent downloads
 func WithConcurrency(concurrency int) Configurator {
-	return func(cfg *configurators) error {
+	return func(cfg *Configurators) error {
 		if concurrency <= 0 {
 			return fmt.Errorf("concurrency must be greater than 0")
 		}
@@ -94,8 +108,9 @@ func WithConcurrency(concurrency int) Configurator {
 	}
 }
 
+// WithTimeout configures the download timeout
 func WithTimeout(timeout time.Duration) Configurator {
-	return func(cfg *configurators) error {
+	return func(cfg *Configurators) error {
 		if timeout <= 0 {
 			return fmt.Errorf("timeout must be greater than zero")
 		}

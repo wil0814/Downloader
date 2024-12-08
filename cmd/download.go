@@ -5,6 +5,7 @@ import (
 	"download/internal/file"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -61,12 +62,13 @@ func Execute() {
 }
 
 func init() {
+	maxConcurrency := runtime.NumCPU()
 
 	// 定義下載命令的參數
 	downloadCmd.Flags().StringVarP(&url, "url", "u", "", "URL of the file to download (required)")
-	downloadCmd.Flags().StringVarP(&fileName, "fileName", "f", "download", "FileName of the file downloads (default: download)")
-	downloadCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 10, "Number of concurrent downloads (default: 10)")
-	downloadCmd.Flags().DurationVarP(&timeout, "timeout", "o", 30*time.Second, "Download timeout duration (default: 30s)")
+	downloadCmd.Flags().StringVarP(&fileName, "fileName", "f", "download", "FileName of the file downloads")
+	downloadCmd.Flags().IntVarP(&concurrency, "concurrency", "c", maxConcurrency, "Number of concurrent downloads")
+	downloadCmd.Flags().DurationVarP(&timeout, "timeout", "o", 30*time.Second, "Download timeout duration")
 
 	// 將 URL 設置為必填參數
 	err := downloadCmd.MarkFlagRequired("url")

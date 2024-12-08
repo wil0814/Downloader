@@ -7,36 +7,32 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"time"
 )
 
 type StandardDownload struct {
 	fileManager FileManager
-	url         string
-	fileName    string
-	timeout     time.Duration
+	conf        Configurators
+	//url         string
+	//fileName    string
+	//timeout     time.Duration
 }
 
 func NewStandardDownload(
 	fileManager FileManager,
-	url string,
-	fileName string,
-	timeout time.Duration,
+	conf Configurators,
 ) *StandardDownload {
 	return &StandardDownload{
 		fileManager: fileManager,
-		url:         url,
-		fileName:    fileName,
-		timeout:     timeout,
+		conf:        conf,
 	}
 }
 
 func (d *StandardDownload) Download() error {
 	// Use context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), d.conf.timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", d.url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", d.conf.url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -55,7 +51,7 @@ func (d *StandardDownload) Download() error {
 		return fmt.Errorf("unexpected HTTP status: %s", resp.Status)
 	}
 
-	return d.writeResponseToFile(ctx, resp.Body, d.fileName, resp.ContentLength)
+	return d.writeResponseToFile(ctx, resp.Body, d.conf.fileName, resp.ContentLength)
 }
 
 func (d *StandardDownload) writeResponseToFile(ctx context.Context, respBody io.ReadCloser, filename string, contentLength int64) error {
@@ -67,7 +63,7 @@ func (d *StandardDownload) writeResponseToFile(ctx context.Context, respBody io.
 		localFile.Close()
 	}()
 
-	// 初始化進度條
+	// Create a progress bar
 	progressBar := utils.NewProgressBar(contentLength)
 	ctxWriter := &utils.ContextWriter{
 		Writer:  io.MultiWriter(localFile, progressBar),

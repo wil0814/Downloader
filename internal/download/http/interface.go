@@ -4,10 +4,10 @@ import "os"
 
 type FileManager interface {
 	CreateDestFile(filename string) (*os.File, error)
-	GetPartFileName(baseName string, index int) string
 	CreatDir(baseName string) error
-	Merge(baseName string, concurrency int) error
+	GetPartFileName(baseName string, index int) string
 	GetDirName(baseName string) string
+	Merge(baseName string, concurrency int) error
 }
 
 type DownloadService interface {
